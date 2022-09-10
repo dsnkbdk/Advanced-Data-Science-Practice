@@ -1,0 +1,779 @@
+---
+title: "STATS 769 Lab 05"
+author: "Wennan Shi"
+date: "27/08/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## The Data Set
+
+We will continue to use the NYC taxi trips dataset from Lab 3 and the Airline dataset from the lectures.
+
+### Tasks
+
+1. Replicate the model from Lab 3 using chunk-wise processing.
+
+```{r, eval=FALSE}
+library(iotools)
+library(biglm)
+```
+
+Model ```tip_amount``` based on ```pre_tip``` for the trips paid by credit card, use the last fours days as test set and all preceding days as training set.
+
+```{r, eval=FALSE}
+f <- bzfile("/course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2", "rb")
+r <- chunk.reader(f)
+fitLM <- NULL
+while (length(chunk <- read.chunk(r))) {
+    d <- dstrsplit(chunk, list(NA, pickup_datetime="", NA, NA, NA, NA, NA, NA, NA, NA, NA, payment_type="", NA, NA, NA, tip_amount=1, NA, total_amount=1), sep=",", strict=FALSE)
+    d$pre_tip <- d$total_amount-d$tip_amount
+    d <- d[complete.cases(d),]
+    d$payment_type[d$payment_type == "CRE"] <- "Cre"
+    dcre <- subset(d, d$payment_type == "Cre")
+    train <- subset(dcre, substr(dcre$pickup_datetime, 9,10) < 28)
+    if (is.null(fitLM)) {
+        fitLM <- biglm(tip_amount ~ pre_tip, train)
+    } else {
+        fitLM <- update(fitLM, train)
+    }
+    print(summary(fitLM))
+    gc()
+}
+```
+
+```
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  49741
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4977 0.4766 0.5189 0.0106 0
+pre_tip     0.1350 0.1337 0.1364 0.0007 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  99459
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4755 0.4609 0.4900 0.0073 0
+pre_tip     0.1365 0.1355 0.1374 0.0005 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  149215
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4551 0.4433 0.4669 0.0059 0
+pre_tip     0.1378 0.1370 0.1386 0.0004 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  198664
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4409 0.4306 0.4513 0.0052 0
+pre_tip     0.1393 0.1386 0.1400 0.0003 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  248283
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4403 0.4309 0.4496 0.0047 0
+pre_tip     0.1395 0.1389 0.1401 0.0003 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  297870
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4385 0.4298 0.4472 0.0043 0
+pre_tip     0.1397 0.1392 0.1403 0.0003 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  347537
+              Coef   (95%    CI)    SE p
+(Intercept) 0.4424 0.4343 0.4505 4e-03 0
+pre_tip     0.1394 0.1389 0.1400 3e-04 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  397286
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4460 0.4385 0.4536 0.0038 0
+pre_tip     0.1392 0.1387 0.1397 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  446824
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4489 0.4418 0.4560 0.0036 0
+pre_tip     0.1389 0.1384 0.1393 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  496354
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4477 0.4410 0.4544 0.0034 0
+pre_tip     0.1389 0.1384 0.1393 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  545969
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4434 0.4369 0.4498 0.0032 0
+pre_tip     0.1393 0.1388 0.1397 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  595633
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4441 0.4379 0.4502 0.0031 0
+pre_tip     0.1391 0.1387 0.1395 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  645788
+              Coef   (95%    CI)    SE p
+(Intercept) 0.4412 0.4353 0.4471 3e-03 0
+pre_tip     0.1394 0.1390 0.1398 2e-04 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  695334
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4416 0.4359 0.4473 0.0028 0
+pre_tip     0.1393 0.1389 0.1396 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  744971
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4411 0.4357 0.4466 0.0027 0
+pre_tip     0.1393 0.1389 0.1396 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  794446
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4375 0.4322 0.4428 0.0026 0
+pre_tip     0.1396 0.1392 0.1399 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  844107
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4386 0.4335 0.4437 0.0026 0
+pre_tip     0.1395 0.1392 0.1399 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  893796
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4405 0.4355 0.4455 0.0025 0
+pre_tip     0.1394 0.1391 0.1397 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  943166
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4395 0.4347 0.4444 0.0024 0
+pre_tip     0.1394 0.1391 0.1398 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  992726
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4377 0.4330 0.4424 0.0024 0
+pre_tip     0.1396 0.1393 0.1399 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1042374
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4393 0.4347 0.4439 0.0023 0
+pre_tip     0.1394 0.1391 0.1397 0.0002 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1091972
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4393 0.4348 0.4438 0.0022 0
+pre_tip     0.1394 0.1391 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1141271
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4398 0.4354 0.4442 0.0022 0
+pre_tip     0.1393 0.1390 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1190923
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4391 0.4348 0.4434 0.0021 0
+pre_tip     0.1393 0.1391 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1240931
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4383 0.4341 0.4425 0.0021 0
+pre_tip     0.1394 0.1391 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1290483
+              Coef   (95%    CI)    SE p
+(Intercept) 0.4385 0.4344 0.4426 2e-03 0
+pre_tip     0.1394 0.1391 0.1396 1e-04 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1339806
+              Coef   (95%    CI)    SE p
+(Intercept) 0.4398 0.4357 0.4438 2e-03 0
+pre_tip     0.1392 0.1390 0.1395 1e-04 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1389119
+              Coef   (95%    CI)    SE p
+(Intercept) 0.4395 0.4355 0.4434 2e-03 0
+pre_tip     0.1393 0.1390 0.1395 1e-04 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1438724
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4389 0.4350 0.4428 0.0019 0
+pre_tip     0.1393 0.1391 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1488648
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4380 0.4342 0.4419 0.0019 0
+pre_tip     0.1394 0.1392 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1538247
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4381 0.4344 0.4419 0.0019 0
+pre_tip     0.1394 0.1391 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1587964
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4371 0.4334 0.4408 0.0018 0
+pre_tip     0.1395 0.1392 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1638011
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4370 0.4334 0.4406 0.0018 0
+pre_tip     0.1394 0.1392 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1687647
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4362 0.4327 0.4398 0.0018 0
+pre_tip     0.1395 0.1393 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1737279
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4358 0.4322 0.4393 0.0018 0
+pre_tip     0.1395 0.1393 0.1398 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1787025
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4376 0.4342 0.4411 0.0017 0
+pre_tip     0.1394 0.1391 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1836869
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4380 0.4346 0.4414 0.0017 0
+pre_tip     0.1393 0.1391 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1886376
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4379 0.4345 0.4413 0.0017 0
+pre_tip     0.1393 0.1391 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1935996
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4375 0.4342 0.4409 0.0017 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  1985658
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4380 0.4347 0.4413 0.0016 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2035470
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4368 0.4336 0.4401 0.0016 0
+pre_tip     0.1395 0.1393 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2085220
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4371 0.4339 0.4403 0.0016 0
+pre_tip     0.1394 0.1392 0.1397 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2135018
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4376 0.4344 0.4408 0.0016 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2184922
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4376 0.4344 0.4407 0.0016 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2234534
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4375 0.4344 0.4406 0.0015 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2284282
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4374 0.4343 0.4405 0.0015 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2333937
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4375 0.4344 0.4405 0.0015 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2383603
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4372 0.4342 0.4402 0.0015 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2433320
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4379 0.4349 0.4409 0.0015 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2482710
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4381 0.4352 0.4411 0.0015 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2532212
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4395 0.4366 0.4424 0.0015 0
+pre_tip     0.1392 0.1390 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2581950
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4403 0.4375 0.4432 0.0014 0
+pre_tip     0.1391 0.1389 0.1393 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2631783
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4403 0.4375 0.4432 0.0014 0
+pre_tip     0.1391 0.1389 0.1393 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2681504
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4401 0.4372 0.4429 0.0014 0
+pre_tip     0.1391 0.1390 0.1393 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2731191
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4391 0.4363 0.4419 0.0014 0
+pre_tip     0.1392 0.1390 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2780885
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4392 0.4364 0.4419 0.0014 0
+pre_tip     0.1392 0.1390 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2830830
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4387 0.4359 0.4414 0.0014 0
+pre_tip     0.1393 0.1391 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2880372
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4383 0.4356 0.4410 0.0014 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2930417
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4375 0.4348 0.4402 0.0013 0
+pre_tip     0.1393 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  2980061
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4381 0.4354 0.4407 0.0013 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3029789
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4392 0.4365 0.4418 0.0013 0
+pre_tip     0.1392 0.1390 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3079494
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4388 0.4362 0.4415 0.0013 0
+pre_tip     0.1392 0.1391 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3128981
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4391 0.4364 0.4417 0.0013 0
+pre_tip     0.1392 0.1390 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3178775
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4395 0.4369 0.4421 0.0013 0
+pre_tip     0.1392 0.1390 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3228664
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4385 0.4359 0.4411 0.0013 0
+pre_tip     0.1393 0.1391 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3278348
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4388 0.4363 0.4414 0.0013 0
+pre_tip     0.1393 0.1391 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3328261
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4384 0.4358 0.4409 0.0013 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3378106
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4379 0.4353 0.4404 0.0013 0
+pre_tip     0.1393 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3427883
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4381 0.4356 0.4406 0.0013 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3477622
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4381 0.4357 0.4406 0.0012 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3527666
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4383 0.4358 0.4407 0.0012 0
+pre_tip     0.1393 0.1391 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3577169
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4385 0.4360 0.4409 0.0012 0
+pre_tip     0.1393 0.1391 0.1394 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3627034
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4380 0.4356 0.4405 0.0012 0
+pre_tip     0.1393 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3676886
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4380 0.4356 0.4404 0.0012 0
+pre_tip     0.1393 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3726584
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4370 0.4346 0.4394 0.0012 0
+pre_tip     0.1394 0.1393 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3776364
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4371 0.4347 0.4395 0.0012 0
+pre_tip     0.1394 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3826263
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4375 0.4352 0.4399 0.0012 0
+pre_tip     0.1394 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3875885
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4374 0.4350 0.4398 0.0012 0
+pre_tip     0.1394 0.1392 0.1395 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3925447
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4372 0.4349 0.4395 0.0012 0
+pre_tip     0.1394 0.1392 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  3975355
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4368 0.4345 0.4391 0.0012 0
+pre_tip     0.1394 0.1393 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  4025105
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4369 0.4346 0.4392 0.0012 0
+pre_tip     0.1394 0.1393 0.1396 0.0001 0
+Large data regression model: biglm(tip_amount ~ pre_tip, train)
+Sample size =  4040287
+              Coef   (95%    CI)     SE p
+(Intercept) 0.4370 0.4347 0.4393 0.0012 0
+pre_tip     0.1394 0.1393 0.1396 0.0001 0
+```
+
+The model obtained in question 8 of Lab 3:
+
+```
+   Coefficients:
+   (Intercept)      pre_tip
+        0.4349       0.1394
+```
+
+From the above results, we can observe that in this Lab, in the initial stage of model fitting, the "Intercept" and "pre_tip" are far away from the results of Lab 3.
+With the increase of the iterations, the coefficients are gradually close to the results of Lab 3.
+Finally, compare with Lab 3, the "pre_tip" is the same and the "Intercept" is slightly different, which is due to the training set of Lab 3 being randomly split, while this Lab uses the last 4 days as test set and all preceding days as training set.
+
+```{r, eval=FALSE}
+gc()
+```
+
+```
+          used (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells  488197 26.1    1254125  67.0   665674  35.6
+Vcells 4527370 34.6   15157293 115.7 15157071 115.7
+```
+
+By using chunk-wise processing in this Lab, Ncells are slightly increased, but Vcells are greatly reduced, in which "memory used" is only 3.5% of Lab 3, and the "max memory used" is only 10% of Lab 3.
+Compared with Lab 3, chunk-wise processing can significantly reduce memory usage but increase processing time, while the Lab 3 approach is faster but greatly increasing memory usage. If dealing with massive data and cannot take too much memory, chunk-wise processing is ideal. If memory resources are very sufficient and the amount of data is suitable, the traditional approach in Lab 3 will be faster.
+
+Compute the RMSE based on the test set also using chunk-wise processing and print the result.
+
+```{r, eval=FALSE}
+f <- bzfile("/course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2", "rb")
+r <- chunk.reader(f)
+n <- 0
+error <- 0
+while (length(chunk <- read.chunk(r))) {
+    d <- dstrsplit(chunk, list(NA, pickup_datetime="", NA, NA, NA, NA, NA, NA, NA, NA, NA, payment_type="", NA, NA, NA, tip_amount=1, NA, total_amount=1), sep=",", strict=FALSE)
+    d$pre_tip <- d$total_amount - d$tip_amount
+    d <- d[complete.cases(d),]
+    d$payment_type[d$payment_type == "CRE"] <- "Cre"
+    dcre <- subset(d, d$payment_type == "Cre")
+    test <- subset(dcre, substr(dcre$pickup_datetime, 9,10) >= 28)
+    obs <- test$tip_amount
+    pred <- predict(fitLM, test)
+    error <- error + sum((obs - pred)^2)
+    n <- n + nrow(pred)
+}
+print(sqrt(error / n))
+```
+
+```
+[1] 1.404859
+```
+
+The RMSE based on the test set by using chunk-wise processing is 1.404859, very close to the RMSE test result in Lab 3 (1.4105).
+
+Summary: In task 1, we used chunk-wise processing, it can be observed that for massive data, chunk-wise processing can significantly reduce memory usage, which is beneficial to the optimization of computing resources.
+
+2. Write R code using SparkR.
+
+```{bash, eval=FALSE}
+sparkR
+```
+
+```{r, eval=FALSE}
+# Extract the data with pick-up date 2010-01-08.
+d <- read.df("/data/nyctaxi/yellow/2010")
+s <- subset(d, substr(d$pickup_datetime, 6,10) == "01-08")
+s <- subset(s, s$payment_type == "Cre" | s$payment_type == "CRE")
+s$pre_tip <- s$total_amount - s$tip_amount
+```
+
+```{r, eval=FALSE}
+# Splits the resulting dataset randomly 90%/10% into training and test set.
+split <- randomSplit(s, c(0.9, 0.1), 666)
+train <- split[[1]] |> select(c("tip_amount", "pre_tip")) |> dropna()
+test <- split[[2]] |> select(c("tip_amount", "pre_tip")) |> dropna()
+```
+
+```{r, eval=FALSE}
+# Compute the same model as in previous question on the training set, print the coefficients of the model and compare it with the result from the previous question.
+model <- glm(tip_amount ~ pre_tip, family = "gaussian", data = train)
+summary(model)
+```
+
+```
+Deviance Residuals:
+(Note: These are approximate quantiles with relative error <= 0.01)
+    Min       1Q   Median       3Q      Max
+-28.021   -0.393   -0.091    0.417   96.147
+
+Coefficients:
+             Estimate  Std. Error  t value  Pr(>|t|)
+(Intercept)   0.44037  0.00586874   75.036         0
+pre_tip       0.13756  0.00040926  336.112         0
+
+(Dispersion parameter for gaussian family taken to be 1.903593)
+
+    Null deviance: 506369  on 153037  degrees of freedom
+Residual deviance: 291318  on 153036  degrees of freedom
+AIC: 532824
+
+Number of Fisher Scoring iterations: 1
+```
+
+From the above results, it can be observed that the coefficients of the model are slightly different from the previous question. Because the dataset for the previous question is "2010-01", the training and test sets are split based on time. In this task, only extracted the data of "2010-01-08" and splits the dataset randomly 90%/10% into training and test set.
+
+```{r, eval=FALSE}
+# Use the model to predict values for the 10% test set, compute the (RMSE) and print it.
+p <- predict(model, test)
+p$se = (p$tip_amount - p$prediction)^2
+mu = agg(p, mu = mean(p$se))
+sqrt(collect(mu)$mu)
+```
+
+```
+[1] 1.495773
+```
+
+Summary: In Task 2, we used sparkR to process data stored in HDFS. It can be observed that Hadoop is computationally efficient and reliable because the Hadoop scheduler can allocate containers to run computing on compute nodes, and all computing is distributed and parallel.
+
+3. There is a Hive table ```flights``` in the database ```airline``` in the cluster. Write a Hive query to return the airport code, mean arrival delay and the number of flights for the top 5 airports with the highest mean arrival delay.
+
+```{bash, eval=FALSE}
+beeline -u jdbc:hive2://fosstatsprd01:10000
+show databases;
+```
+
+```
++----------------+
+| database_name  |
++----------------+
+| airline        |
+| default        |
+| nyctaxi        |
++----------------+
+```
+
+```{bash, eval=FALSE}
+use airline;
+show tables;
+```
+
+```
++-----------+
+| tab_name  |
++-----------+
+| flights   |
++-----------+
+```
+
+```{bash, eval=FALSE}
+describe flights;
+```
+
+```
++--------------------+------------+----------+
+|      col_name      | data_type  | comment  |
++--------------------+------------+----------+
+| year               | int        |          |
+| month              | int        |          |
+| dayofmonth         | int        |          |
+| dayofweek          | int        |          |
+| deptime            | int        |          |
+| crsdeptime         | int        |          |
+| arrtime            | int        |          |
+| crsarrtime         | int        |          |
+| uniquecarrier      | char(8)    |          |
+| flightnum          | int        |          |
+| tailnum            | int        |          |
+| actualelapsedtime  | int        |          |
+| crselapsedtime     | int        |          |
+| airtime            | int        |          |
+| arrdelay           | int        |          |
+| depdelay           | int        |          |
+| origin             | char(4)    |          |
+| dest               | char(4)    |          |
+| distance           | int        |          |
+| taxiin             | int        |          |
+| taxiout            | int        |          |
+| cancelled          | int        |          |
+| cancellationcode   | int        |          |
+| diverted           | int        |          |
+| carrierdelay       | int        |          |
+| weatherdelay       | int        |          |
+| nasdelay           | int        |          |
+| securitydelay      | int        |          |
+| lateaircraftdelay  | int        |          |
++--------------------+------------+----------+
+```
+
+```{bash, eval=FALSE}
+select dest, avg(arrdelay) as mean_arrival_delay, count(flightnum) as number_of_flights from flights group by dest order by mean_arrival_delay desc limit 5;
+```
+
+```
++-------+---------------------+--------------------+
+| dest  | mean_arrival_delay  | number_of_flights  |
++-------+---------------------+--------------------+
+| PIH   | 59.0                | 1                  |
+| PSE   | 30.533333333333335  | 60                 |
+| RDD   | 24.54957507082153   | 357                |
+| SUN   | 23.5                | 80                 |
+| ACV   | 22.814285714285713  | 358                |
++-------+---------------------+--------------------+
+```
+
+Summary: In Task 3, we used Hive to query and output the results. It can be observed that it is queried like SQL and output like tables because Hive uses database techniques on data in HDFS.
+
+4. Write a Map/Reduce job using R and the ```hmapred``` package to compute the mean arrival delay for all pairs of origin/destination airports from the airline dataset.
+
+```{r, eval=FALSE}
+library(hmapred)
+library(iotools)
+```
+
+```{r, eval=FALSE}
+res <- hmr(hinput("/data/airline/csv", function(r)
+    d = dstrsplit(r, list(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,ArrDelay=1,NA,Origin="",Dest=""),
+        sep=",", strict=FALSE)),
+    map = function(d) {
+        d = d[complete.cases(d),]
+        a = aggregate(d$ArrDelay, list(airports = paste0(d$Origin, sep="--", d$Dest)),
+            function(x) c(sum=sum(x), n=length(x)))
+        m = a$x
+        rownames(m) = a$airports
+        m
+    },
+    reduce = function(m)
+    tryCatch({
+        storage.mode(m) = "numeric"
+        t(sapply(split(m, rownames(m)), function(x) colSums(matrix(x,,2))))
+    },
+    error = function(e) as.character(e)),
+    reducers = 10
+    )
+```
+
+Omit some INFO and WARN.
+
+```
+        File System Counters
+                FILE: Number of bytes read=18543428
+                FILE: Number of bytes written=66778624
+                FILE: Number of read operations=0
+                FILE: Number of large read operations=0
+                FILE: Number of write operations=0
+                HDFS: Number of bytes read=12029526605
+                HDFS: Number of bytes written=153017
+                HDFS: Number of read operations=338
+                HDFS: Number of large read operations=0
+                HDFS: Number of write operations=20
+                HDFS: Number of bytes read erasure-coded=0
+        Job Counters
+                Killed map tasks=1
+                Launched map tasks=96
+                Launched reduce tasks=10
+                Data-local map tasks=60
+                Rack-local map tasks=36
+                Total time spent by all maps in occupied slots (ms)=589285
+                Total time spent by all reduces in occupied slots (ms)=208520
+                Total time spent by all map tasks (ms)=589285
+                Total time spent by all reduce tasks (ms)=208520
+                Total vcore-milliseconds taken by all map tasks=589285
+                Total vcore-milliseconds taken by all reduce tasks=208520
+                Total megabyte-milliseconds taken by all map tasks=603427840
+                Total megabyte-milliseconds taken by all reduce tasks=213524480
+        Map-Reduce Framework
+                Map input records=123534991
+                Map output records=990350
+                Map output bytes=16562668
+                Map output materialized bytes=18549128
+                Input split bytes=9408
+                Combine input records=0
+                Combine output records=0
+                Reduce input groups=7852
+                Reduce shuffle bytes=18549128
+                Reduce input records=990350
+                Reduce output records=7852
+                Spilled Records=1980700
+                Shuffled Maps =960
+                Failed Shuffles=0
+                Merged Map outputs=960
+                GC time elapsed (ms)=14388
+                CPU time spent (ms)=301980
+                Physical memory (bytes) snapshot=46266277888
+                Virtual memory (bytes) snapshot=276618059776
+                Total committed heap usage (bytes)=73636249600
+                Peak Map Physical memory (bytes)=587956224
+                Peak Map Virtual memory (bytes)=2613817344
+                Peak Reduce Physical memory (bytes)=417615872
+                Peak Reduce Virtual memory (bytes)=2773463040
+        Shuffle Errors
+                BAD_ID=0
+                CONNECTION=0
+                IO_ERROR=0
+                WRONG_LENGTH=0
+                WRONG_MAP=0
+                WRONG_REDUCE=0
+        File Input Format Counters
+                Bytes Read=12029517197
+        File Output Format Counters
+                Bytes Written=153017
+```
+
+Print the top 5 pairs.
+
+```{r, eval=FALSE}
+f = open(res, "rb")
+r = readAsRaw(f)
+close(f)
+m = mstrsplit(r, type="numeric", nsep="\t")
+dmean = m[,1] / m[,2]
+head(sort(dmean, decreasing = TRUE), 5)
+```
+
+```
+GUC--HDN CMI--SPI VPS--DHN SYR--DEN ELP--MFE
+     998      575      506      487      316
+```
+
+Summary: In Task 4, we used Map/Reduce to process and compute data. It can be observed that we need to construct "map" and "reduce" in the code. The result comprises a key and value each, collect values with the same key together. For each key, apply a function to all values with that key. All computing is done on key/value pairs.

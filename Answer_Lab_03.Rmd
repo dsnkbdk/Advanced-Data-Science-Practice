@@ -1,0 +1,200 @@
+---
+title: "STATS 769 Lab 03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## The Data Set
+
+We will be using yellow taxi trip records. Our copy of the data lives in ```/course/data/nyctaxi/csv``` and consists of bzip2-compressed CSV files.
+
+### Import
+
+1. Use a shell command to determine how long it takes to decompress the ```yellow_tripdata_2010-01.csv.bz2``` data file and count how many lines it has.
+
+```{bash, eval=FALSE}
+time bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | wc -l
+
+14863780
+
+real    1m16.949s
+user    1m15.305s
+sys     0m10.817s
+```
+
+Estimate decompress:
+
+all data for the year 2010: 76.949 * 12 = 923.388s = 15m23.388s
+
+all the available CSV files in the ```csv``` directory: 76.949 * 12 * 7 = 6463.716s = 107m43.716s
+
+2. Use a shell command to count the number of lines in each compressed file for year 2010 all in parallel and measure the time.
+
+```{bash, eval=FALSE}
+time ls /course/data/nyctaxi/csv/yellow_tripdata_2010-*.csv.bz2 | parallel -j12 'bzip2 -dc {} | wc -l'
+
+11145411
+12528179
+12884364
+13819324
+13912312
+14199609
+14863780
+14656521
+14825130
+15481353
+15540211
+15144992
+
+real    1m47.963s
+user    19m1.641s
+sys     1m32.641s
+```
+
+The real time of decompressing all files is only tens of seconds longer than decompressing one file, which is far less than our estimate. This shows that parallel processing can greatly improve efficiency.
+
+3. Use a shell command to extract the fields ```payment_type```, ```tip_amount``` and ```total_amount``` from the ```yellow_tripdata_2010-01.csv.bz2``` file into the file ```tips-2010-01.csv```.
+
+```{bash}
+bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | head -n 1
+bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | awk -F, '{print $12","$16","$NF}' > tips-2010-01.csv
+wc -l tips-2010-01.csv
+ls -lh
+```
+
+The size of the file is 323M. The memory required to load the dataset is:
+
+14863780*(8+8) = 237,820,480 Bytes = 227 Mb. So it fits into the memory of a computer with 2Gb of RAM.
+
+
+4. Read the ```tips-2010-01.csv``` file into R as a data frame named ```tt```.
+
+```{r}
+system.time(tt1 <- iotools::read.csv.raw("tips-2010-01.csv", sep=","))
+system.time(tt2 <- data.table::fread("tips-2010-01.csv", sep=","))
+system.time(tt3 <- readr::read_csv("tips-2010-01.csv"))
+tt <- tt1[-c(1),]
+str(tt)
+object.size(tt)
+```
+
+The actual object size of ```tt``` is 416187120 bytes = 396.9M, larger than estimated.
+
+### Clean
+
+5. Clean the variable such that it is consistent.
+
+```{r}
+table(tt$payment_type)
+tt$payment_type[tt$payment_type == "CAS"] <- "Cas"
+tt$payment_type[tt$payment_type == "CRE"] <- "Cre"
+table(tt$payment_type)
+```
+
+### Explore
+
+6. Check the sanity of the data.
+
+```{r}
+summary(tt)
+## all values are plausible
+```
+
+```{r}
+# Check if there is any NA value
+sapply(tt, function(x) any(is.na(x)))
+```
+
+```{r}
+# Check if any tip_amount is higher than total_amount
+all(tt$total_amount > tt$tip_amount)
+```
+
+```{r}
+# Check the distribution of tip_amount and total_amount
+hist(tt$tip_amount)
+hist(tt$total_amount)
+```
+
+```{r}
+hist(log10(tt$tip_amount), col=4)
+hist(log10(tt$total_amount), col=2)
+```
+
+7. Check the relationship between the presence of a tip (i.e., ```tip_amount``` is not zero) and the payment type.
+
+```{r}
+tip <- subset(tt, tt$tip_amount!=0)
+nrow(tip)
+table(tip$payment_type)
+tip_rate <- nrow(tip)/nrow(tt)
+tip_rate
+Cas_tip_rate <- sum(tip$payment_type == "Cas")/nrow(tip)
+Cre_tip_rate <- sum(tip$payment_type == "Cre")/nrow(tip)
+Cas_tip_rate
+Cre_tip_rate
+```
+
+About 31% of people tip when taking a taxi in New York. About 99.9% of people who tip are paid by credit card.
+
+### Model
+
+8. We will focus on tips in credit card transactions. In order for the model to make sense, we have to create a variable ```pre_tip``` which is the total without the tip and we want to use it to model the tip amount.
+
+```{r}
+cre <- subset(tt, tt$payment_type == "Cre")
+cre$pre_tip = cre$total_amount-cre$tip_amount
+str(cre)
+```
+
+```{r}
+set.seed(666) 
+split <- sample(nrow(cre), round(nrow(cre)*0.9))
+train <- cre[split,]
+test <- cre[-split,]
+dim(train)
+dim(test)
+```
+
+```{r}
+# Compute RMSE
+fitLM <- lm(tip_amount ~ pre_tip, train)
+pred_train <- predict(fitLM, train)
+pred_test <- predict(fitLM, test)
+```
+
+```{r}
+RMSE = function(obs, pred) sqrt(mean((pred - obs)^2))
+RMSE(train$tip_amount, pred_train)
+RMSE(test$tip_amount, pred_test)
+```
+
+```{r}
+plot(test$pre_tip, test$tip_amount, pch='.', xlab="pre-tip", ylab="tip_amount")
+abline(fitLM, col=2, lwd=2)
+```
+
+```{r}
+tip_20 <- nrow(subset(test, test$tip_amount <= 20))
+pre_tip_50 <- nrow(subset(test, test$pre_tip <= 50))
+tip_rate_test <- tip_20/nrow(test)
+tip_rate_test
+pre_tip_rate_test <- pre_tip_50/nrow(test)
+pre_tip_rate_test
+```
+
+In general, the higher the cost of a ride, the more tip is paid, and the linear model captures this well.
+98% of people take a taxi for less than $50 and people are reluctant to tip more than $20.
+
+Although some tips are abnormally high, this does not affect the overall trend of the model. Because tipping is a personal act, it is not ruled out that someone is willing to pay a particularly high tip to the driver for special reasons.
+
+## Summary
+
+The data in this lab is very large, so we only analyzed the data related to tips in January 2010.
+
+We noticed that 98% of people take a taxi for less than $50 and 30% tip. Among them, more than 99% will not tip more than $20, and almost all pay by credit card.
+
+We also observed a linear relationship between the amount of tip and the cost of the ride, i.e., the higher the ride cost, the more tip is paid.

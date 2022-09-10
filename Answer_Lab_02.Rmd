@@ -1,0 +1,226 @@
+---
+title: "STATS 769 Lab 02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## The Data Set
+
+### Import
+
+Our goal is to download daily low/high temperature for Auckland between 1 January 1980 and 30 June 2022.
+
+1. Use the ```curl``` command in unix to download the result into the file ```akl.json```.
+
+```{bash}
+curl -o akl.json "https://archive-api.open-meteo.com/v1/era5?latitude=-36.86&longitude=174.76&start_date=1980-01-01&end_date=2022-06-30&daily=temperature_2m_max,temperature_2m_min&timezone=Pacific%2FAuckland"
+```
+
+2. Read the result into an R object ```jd```.
+
+```{r}
+Sys.setlocale(category="LC_ALL",locale="en_US.UTF-8")
+library(jsonlite)
+jd <- fromJSON(readLines("akl.json"))
+str(jd)
+```
+
+### Clean
+
+3. Create a data frame ```d``` with the columns ```day```, ```min``` and ```max``` from the obejct ```jd```.
+
+```{r}
+d <- data.frame(as.Date(jd$daily$time), as.numeric(jd$daily$temperature_2m_min), as.numeric(jd$daily$temperature_2m_max))
+names(d) <- c("day","min","max")
+str(d)
+```
+
+### Explore
+
+4. Verify the sanity of the data.
+
+```{r}
+# Check the dimensions of the dataframe.
+dim(d)
+```
+
+```{r}
+# Check if there is any NA value.
+any(is.na(d))
+```
+
+```{r}
+# Check if there is any duplicate date.
+any(duplicated(d$day))
+```
+
+```{r}
+# Check if any min temp is higher than max temp.
+any(d$min >= d$max)
+```
+
+```{r}
+# Check the distribution of the temperature and if there is any extreme anomaly.
+boxplot(d$min,d$max, ylab="Temperature", names=c("min","max"))
+```
+
+### Model
+
+5. Focus on the evolution of yearly average temperatures over time.
+
+```{r}
+# Compute daily average temperatures and combine them into yearly average temperatures.
+temp <- data.frame(d$min,d$max)
+temp$avg <- rowMeans(temp)
+temp_avg <- data.frame(as.integer(substr(d$day,1,4)),temp$avg)
+names(temp_avg) <- c("year","avg")
+avg <- data.frame(aggregate(temp_avg$avg, list(temp_avg$year), FUN=mean))
+names(avg) <- c("year","avg")
+str(avg)
+```
+
+```{r}
+# Use years 1980-2014 as training set and remaining data as a test set.
+train <- subset(avg, year <= 2014)
+test <- subset(avg, year > 2014)
+```
+
+```{r}
+# Compute RMSE for the test set.
+fitMean = mean(train$avg)
+fitLM = lm(avg ~ year, train)
+predMean = fitMean
+predLM = predict(fitLM, test)
+RMSE = function(obs, pred) sqrt(mean((pred - obs)^2))
+RMSE(test$avg, predMean)
+RMSE(test$avg, predLM)
+```
+
+```{r}
+# Fit a simple overall mean model and a linear regression model with the year as a predictor variable.
+plot(avg$year, avg$avg, type = "l", main = "Yearly Average Temperature of Auckland", xlab = "Year", ylab = "Avg Temperature")
+abline(h=predMean, col=4, lwd=2)
+abline(fitLM, col=2, lwd=2)
+```
+
+```{r}
+# Check if there is any outlier in the test set.
+head(avg[order(-avg$avg),], 10)
+outlier <- boxplot(avg$avg, ylab = "Avg Temperature")$out
+text(outlier, adj=-0.3, labels=round(outlier, 5))
+```
+
+We observed a sharp increase in the yearly average temperature in 2022.
+
+This is because the temperature data for 2022 is only until June 30, and in Auckland, the first half of the year is summer, and the temperature is definitely above average.
+
+Therefore, we consider deleting the temperature data in 2022 and retraining the model.
+
+```{r}
+# After removing the data for 2022, split the dataset again.
+new_avg <- subset(avg,year < 2022)
+new_train <- subset(new_avg, year <= 2014)
+new_test <- subset(new_avg, year > 2014)
+```
+
+```{r}
+# Compute RMSE for the new test set.
+fitMean = mean(new_train$avg)
+fitLM = lm(avg ~ year, new_train)
+predMean = fitMean
+predLM = predict(fitLM, new_test)
+RMSE = function(obs, pred) sqrt(mean((pred - obs)^2))
+RMSE(new_test$avg, predMean)
+RMSE(new_test$avg, predLM)
+```
+
+```{r}
+# Fit two models again with the new training set.
+plot(new_avg$year, new_avg$avg, type = "l", main = "Yearly Average Temperature of Auckland", xlab = "Year", ylab = "Avg Temperature")
+abline(h=predMean, col=4, lwd=2)
+abline(fitLM, col=2, lwd=2)
+```
+
+After removing the temperature data for 2022, the model reflected changes in Auckland's average temperature from 1980 to 2021.
+
+We can see more clearly that the average temperature in 1998 was the highest, and the annual average temperature has increased year by year since 2004.
+
+Since both models are based on the data from 2014 and before as the training set, their predictions are no different. The linear model better reflects the global warming trends.
+
+## Revisit
+
+6. Read the ```html``` page into R and extracts the contained table into a data frame ```cities```.
+
+```{r}
+library(rvest)
+html <- read_html("https://stat.auckland.ac.nz/~su/769/demo/nzcities.html")
+table <- html_nodes(html, "table")[[1]]
+cities <- data.frame(html_table(table))
+str(cities)
+```
+
+Use the contained coordinates to fetch the maximum daily temperatures for the most populous 5 cities for the period from 2021-01-01 to 2021-12-31 from the Open Meteo API and plot the result.
+
+```{r}
+# The most populous 5 cities.
+five_cities <- cities[order(-cities$population),][1:5,]
+five_cities <- five_cities[,1:3]
+```
+
+```{r}
+# Extract coordinate information.
+lats <- c(five_cities$lat)
+lngs <- c(five_cities$lng)
+```
+
+```{r}
+# Construct the desired URLs.
+urls <- paste0("https://archive-api.open-meteo.com/v1/era5?latitude=",lats,"&longitude=",lngs,"&start_date=2021-01-01&end_date=2021-12-31&daily=temperature_2m_max&timezone=Pacific%2FAuckland")
+auc <- data.frame(fromJSON(readLines(urls[1])))
+wel <- data.frame(fromJSON(readLines(urls[2])))
+chr <- data.frame(fromJSON(readLines(urls[3])))
+man <- data.frame(fromJSON(readLines(urls[4])))
+wai <- data.frame(fromJSON(readLines(urls[5])))
+```
+
+```{r}
+five_cities_max_Temp <- data.frame(as.Date(auc$daily.time), auc$daily.temperature_2m_max, wel$daily.temperature_2m_max, chr$daily.temperature_2m_max, man$daily.temperature_2m_max, wai$daily.temperature_2m_max)
+names(five_cities_max_Temp) <- c("Day","Auckland","Wellington","Christchurch","Manukau City","Waitakere")
+str(five_cities_max_Temp)
+```
+
+```{r}
+plot(five_cities_max_Temp$Day, five_cities_max_Temp$Auckland, ty="l", xlab="Day", ylab="max.temperature", ylim=c(5,30))
+lines(five_cities_max_Temp$Day, five_cities_max_Temp$Wellington,col=2)
+lines(five_cities_max_Temp$Day, five_cities_max_Temp$Christchurch,col=3)
+lines(five_cities_max_Temp$Day, five_cities_max_Temp$"Manukau City",col=4)
+lines(five_cities_max_Temp$Day, five_cities_max_Temp$Waitakere,col=5)
+legend(x="bottomleft", legend=c("Auckland","Wellington","Christchurch","Manukau City","Waitakere"),lty=1,col=c(1:5),lwd=2)
+```
+
+The plot shows the changes in maximum temperature in 5 major New Zealand cities in 2021.
+
+We can observe that because New Zealand is located in the southern hemisphere, January to March is in summer,  the temperature is higher, but there is no high temperature over 30 C. While July to September is in winter, the temperature is lower, but there is no low temperature under 0 C. Generally speaking, the climate of these cities is very comfortable.
+
+Since Auckland, Manukau City, and Waitakere are located in the northern part of New Zealand (lower latitude), the overall temperature is higher than in Wellington and Christchurch (higher latitude).
+
+Christchurch experiences the biggest temperature variation over the year, with highs approaching 30 C in February (summer) and lows approaching 5 C in August (winter).
+
+## Summary
+
+In this lab, we explored the dataset recording daily low/high temperatures for Auckland between 1 January 1980 and 30 June 2022.
+
+First, we constructed a URL that includes the desired data and save it as a ```.json``` file. We selected the date, the max temperature, the min temperature in the data set, and verified the sanity of the data.
+
+We then focused on the yearly average temperature, and fitted a constant mean model and a linear model, taking years between 1980 and 2014 as the training set and the remaining years as the test set. 
+
+We found that the 2022 data was only for the first half of the year when Auckland was in the summer, so the average temperature for the year was abnormally high, so we deleted the 2022 data and retrained the model. 
+
+Overall, the yearly average temperature has been rising slowly, and the simple linear model captures this well and thus outperforms the simple constant average. But there are still some unexplained problems, such as the high temperature in 1998.
+
+We parsed and extracted the coordinates of the most populous 5 cities in New Zealand from the web page and again constructed the desired URL.
+
+We plot a line graph based on the obtained data and observed that these 5 cities have higher temperatures from January to March and lower temperatures from July to September. This is due to the fact that New Zealand is located in the southern hemisphere, and climate change is just opposite to the northern hemisphere. We also found that Auckland, Manukau City, and Waitakere had slightly higher overall temperatures than Wellington and Christchurch, due to the higher dimensionality of the latter two cities.

@@ -1,0 +1,175 @@
+---
+title: "STATS 769 Lab 04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## The Data Set
+
+We will continue to use the NYC taxi trips dataset from Lab 3.
+
+### Import
+
+1. We want to focus on the pickup locations and times in the dataset. Given the size of the full data, let us focus on one weekday: 2010-01-08.
+
+```{bash}
+if [ ! -e pickup-2010-01-08.txt ]; then bzip2 -dc /course/data/nyctaxi/csv/yellow_tripdata_2010-01.csv.bz2 | awk -F, '{print $2","$6","$7}' | grep "2010-01-08 *" > pickup-2010-01-08.txt; fi
+```
+
+2. Read the file ```pickup-2010-01-08.txt``` into R variable ```pickup``` and add the column names.
+
+```{r}
+pickup <- data.table::fread("pickup-2010-01-08.txt", data.table=FALSE)
+names(pickup) <- c("time", "lon", "lat")
+pickup$time <- as.character(pickup$time)
+str(pickup)
+```
+
+Verify have only records for the day ```2010-01-08```.
+
+```{r}
+# The range is between 2010-01-08 00:00:00 and 2010-01-08 23:59:59.
+range(pickup$time)
+```
+
+```{r}
+# The number of 2010-01-08 is equal the number of obs.
+sum(grepl("2010-01-08", pickup$time))
+```
+
+```{r}
+plot(pickup$lon, pickup$lat, pch="+")
+```
+
+We found that most of the data is concentrated above longitude -80 and below latitude 50. But there are 2 data points that are very suspicious, one with a longitude around -700, and one with a latitude around 400, both exactly 10 times the normal value. So it may be that an error occurred during data logging. We will delete this suspicious data in the next task.
+
+3. Remove all points outside the New York City area.
+
+```{r}
+pickup <- subset(pickup, lon >= -74.5 & lon <= -73.5)
+pickup <- subset(pickup, lat >= 40.4 & lat <= 41.1)
+```
+
+```{r}
+time <- substr(pickup$time, 12,13)
+by_hour <- split(pickup, time)
+str(by_hour)
+```
+
+```{r}
+barplot(table(time), las=1, cex.names=0.6)
+```
+
+From the above plot we observe that from 0:00 onwards, trips drop rapidly and reach the lowest point in the whole day between 4:00 and 5:00 because at this time the night entertainment venues are closed and most people are sleeping.
+The number of trips began to rise sharply from 6:00 am, reaching a peak at 8:00 am, as people start going out to work, which is the peak time for taxi usage.
+It then flattens out, with trips per hour in the range of about 20,000 to 25,000. From 17:00, the number of trips began to grow rapidly again, reaching the highest peak throughout the day at 19:00, even exceeding the morning peak. Because this time is when people go home from getting off work, and it is also when people go to restaurants, bars, shopping malls, and other entertainment venues. Subsequent trips remain above 30,000 until the end of the day. So it is conceivable that New York has colorful nightlife after 19:00.
+
+4. Read the dataset into the variable ```fs``` and adjust the column names.
+
+```{r}
+fs <- data.table::fread("/course/data/fsquare/dataset_TIST2015_POIs.txt", data.table=FALSE)
+names(fs) <- c("id", "lat", "lon", "type", "country")
+str(fs)
+```
+
+Let us focus on the subset of pickups between 08:00 and 09:00. Find the closest Foursquare location (as row number in fs) for each pickup location.
+
+```{r}
+pickup_08 <- pickup[substr(pickup$time, 12,13) == "08",]
+fs_NY <- subset(fs, lon >= -74.5 & lon <= -73.5)
+fs_NY <- subset(fs_NY, lat >= 40.4 & lat <= 41.1)
+```
+
+```{r}
+m1 = cbind(lat = fs_NY[[2]], lon = fs_NY[[3]])
+m2 = cbind(lat = pickup_08[[3]], lon = pickup_08[[2]])
+dim(m1)
+dim(m2)
+```
+
+```{r}
+hav <- function(m, p, r=6378137) {
+    m <- m / 180 * pi
+    p <- p / 180 * pi
+    dLat <- m[,1] - p[1]
+    dLon <- m[,2] - p[2]
+    a <- (sin(dLat/2))^2 + cos(p[1]) * cos(m[,1]) * (sin(dLon/2))^2
+    a <- pmin(a, 1)
+    2 * atan2(sqrt(a), sqrt(1 - a)) * r
+}
+```
+
+Develop code on a small subset first.
+
+```{r}
+system.time(for (i in 1:100) which.min(hav(m1, m2[i,])))
+```
+
+Then parallelise the code using mclapply with 10 cores.
+
+```{r}
+library(parallel)
+system.time(l1 <- mclapply(1:100, function(i) which.min(hav(m1, m2[i,])), mc.cores=10))
+system.time(l1 <- mclapply(seq.int(nrow(m2)), function(i) which.min(hav(m1, m2[i,])), mc.cores=10))
+```
+
+From the above results, it can be observed that taking the same 100 data subset, the speed of parallelising is about 6 times that of the traditional method. We process about 28771 data in parallelise with ```mclapply``` only need under 1 minute.
+
+5. Perform the same task, but instead of ```mclapply``` use ```makeCluster(10)``` and corresponding cluster functions such as ```clusterApply``` and ```clusterExport```.
+
+```{r}
+startTime <- Sys.time()
+cl <- makeCluster(10)
+clusterExport(cl, c("m1", "m2", "hav"))
+l2 <- clusterApply(cl, seq.int(nrow(m2)), function(i)  which.min(hav(m1, m2[i,])))
+stopCluster(cl)
+endTime <- Sys.time()
+timing <- endTime - startTime
+timing
+```
+
+Confirm that the results are consistent
+
+```{r}
+all.equal(unlist(l1), unlist(l2))
+```
+
+From the above results, we can observe that ```clusterApply``` runs slower compared to ```mclapply```. In practice, ```clusterApply``` is a little more complex, because it requires 3 instructions to determine the number of cores, load packages, load variables, and finally need ```stopCluster()``` to close, which is sometimes not very friendly to debugging. And ```mclapply``` can be done in one instruction.
+
+6. Run the same analysis, but for the time between 20:00 and 21:00 instead.
+
+```{r}
+pickup_20 <- pickup[substr(pickup$time, 12,13) == "20",]
+m3 = cbind(lat = pickup_20[[3]], lon = pickup_20[[2]])
+dim(m3)
+l3 <- mclapply(seq.int(nrow(m3)), function(i) which.min(hav(m1, m3[i,])), mc.cores=10)
+```
+
+Compute the tables of the Forsquare venue ```type``` nearest the pickup locations between 08:00-09:00 and between 20:00-21:00 hours. Compare the two tables and comment on the results.
+
+```{r}
+locations_08 <- sort(table(fs_NY[unlist(l1), 4]), decreasing = TRUE)
+locations_08[1:10]
+```
+
+```{r}
+locations_20 <- sort(table(fs_NY[unlist(l3), 4]), decreasing = TRUE)
+locations_20[1:10]
+```
+
+We took the top 10 Forsquare venues of 2 time periods respectively. Based on the above results, we observed that Office, Residential Building, as well as coffee shops all rank higher. It is conceivable that in the morning people leave from home to go to work, or from the office to negotiate business, and in the evening, people go home from the office, or from home to entertainment venues.
+
+We also noticed that the Pharmacy and Bus Line that appeared in the morning disappeared in the evening, replaced by Bar and  American Restaurant. This suggests that people tend to dispense their medicines in the morning, and perhaps because the bus is too slow in the morning, people will take taxis near the bus line. And at night, people enjoy going to nightlife venues such as bars and restaurants.
+
+In general, based on the taxi pickup data， we can restore the living conditions of New Yorkers to a certain extent.
+
+
+
+
+
+
+
+

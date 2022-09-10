@@ -1,0 +1,203 @@
+---
+title: "STATS 769 Lab 01"
+output: html_document
+---
+
+## The Data Set
+
+In the Unix part, I downloaded and extracted all the files to the working directory by the following command:
+```curl https://www.stat.auckland.ac.nz/~su/769/vehicles.tar.gz | tar vxz```
+
+In the R part, since my ```~/UNI_HOME``` is not working, I downloaded ```new-car-imports.csv``` from Canvas and completed the task under windows OS.
+
+## Tasks
+
+### Unix
+
+1. Show the Unix command to create a directory to hold the files for this lab (including your R Markdown file) and show the Unix command to navigate to that directory.
+
+```{bash, eval=FALSE}
+mkdir lab01
+cd lab01/
+curl https://www.stat.auckland.ac.nz/~su/769/vehicles.tar.gz | tar vxz
+```
+
+2. Write a shell command that shows information about all the data files including the size in bytes for each of them.
+
+```{bash}
+ls -la
+```
+
+3. Write a shell command that shows the number of lines in the ```vehicles-2020.csv``` file.
+
+```{bash}
+wc -l vehicles-2020.csv
+```
+
+4. Write a shell command that extracts all records with HSC ```8703231915``` from all the files into a new file ```car-imports.data```. Then write a shell command that counts the number of lines in the new created file.
+
+```{bash}
+head -n 1 vehicles-2020.csv > car-imports.data
+awk '/8703231915/' vehicles-20* >> car-imports.data
+wc -l car-imports.data
+```
+
+5. Write a shell script which returns total counts (number of lines) for all HS codes (taking into account all files) in ascending count order and print the last five lines of the output.
+
+```{bash}
+cat vehicles-20*.csv|sed -n '/8703/p'|cut -d , -f2|sort|uniq -c|sort -n|tail -n 5
+```
+
+6. We are only interested in vehicles that have the following HS codes depending on the engine: ```8703218006```, ```8703228003```, ```8703238003```, ```8703248003```, ```8703211915```, ```8703221915```, ```8703231915```, ```8703241915```. Write one or more shell commands that create a valid CSV file named ```new-car-imports.csv``` from all the vehicle data files containing only the HS codes listed above.
+
+```{bash}
+head -n 1 vehicles-2020.csv > new-car-imports.csv
+awk '/8703218006/' vehicles-20* >> new-car-imports.csv
+awk '/8703228003/' vehicles-20* >> new-car-imports.csv
+awk '/8703238003/' vehicles-20* >> new-car-imports.csv
+awk '/8703248003/' vehicles-20* >> new-car-imports.csv
+awk '/8703211915/' vehicles-20* >> new-car-imports.csv
+awk '/8703221915/' vehicles-20* >> new-car-imports.csv
+awk '/8703231915/' vehicles-20* >> new-car-imports.csv
+awk '/8703241915/' vehicles-20* >> new-car-imports.csv
+wc -l new-car-imports.csv
+```
+
+### Import
+
+7. Read the ```new-car-imports.csv``` CSV file into R, and generate a data frame ```cars```
+
+```{r}
+cars <- read.csv("new-car-imports.csv")
+head(cars)
+```
+
+### Clean
+
+8. Replace the original column names with shorter alternatives. Turn the numeric variables into proper numeric vectors. Create a new variable ```Date``` based on the ```Month``` variable.
+
+```{r}
+# Replace the original column names with shorter alternatives.
+names(cars)[names(cars) == "Harmonised.System.Code"] <- "HSC"
+names(cars)[names(cars) == "Harmonised.System.Description"] <- "HSDescription"
+names(cars)[names(cars) == "Unit.Qty"] <- "Unit"
+names(cars)[names(cars) == "Imports...NZD.vfd."] <- "VFD"
+names(cars)[names(cars) == "Imports...NZD.cif."] <- "CIF"
+names(cars)[names(cars) == "Imports.Qty"] <- "Quantity"
+names(cars)[names(cars) == "X"] <- "Unknown"
+
+# Turn the numeric variables into proper numeric vectors.
+for (col in c("VFD", "CIF", "Quantity"))
+  cars[[col]] <- as.numeric(gsub(",","",cars[[col]]))
+
+# Create a new variable "Date" based on the "Month" variable.
+cars$Date <- as.Date(paste(substr(cars$Month, 1, 4), substr(cars$Month, 5, 6), "01", sep="-"))
+
+str(cars)
+```
+
+### Explore
+
+9. Create a bar plot of total imported value (VFD) by country.
+
+```{r}
+par(mar=c(2,12,0.5,0.5))
+countryVFD <- sort(xtabs(VFD ~ Country, cars))
+barplot(countryVFD, horiz=TRUE, las=1, space=0.2, cex.axis=0.6, cex.names=0.5)
+```
+
+Since Japan's import value far exceeds that of other countries, we cannot clearly distinguish those countries with small import values, it would be meaningful to use square root or log transformation.
+
+```{r}
+par(mar=c(2,12,0.5,0.5))
+barplot(countryVFD, horiz=TRUE, las=1, space=0.2, cex.axis=0.6, cex.names=0.5, log="x")
+```
+
+10. Compute the aggregated monthly import value (VFD) of each HS code and draw a line plot of the result.
+
+```{r}
+cars$VFD <- cars$VFD/1e6
+Month_VFD_HSC <- xtabs(VFD ~ Date+HSC, cars)
+matplot(as.Date(rownames(Month_VFD_HSC)), Month_VFD_HSC, type='l', lty=1,
+main="Total Monthly Import Value by HS Code",
+xlab="Month", ylab="Value for Duty in millions NZD")
+```
+
+We noticed that the position in the plot is around 2017, there seems to be a clear dividing line, but the whole trend in the plot is continuous, so it is speculated that it may be the same model of car, just changed to a different HS code.
+
+```{r}
+before2017 = subset(cars, Month <= 201612)
+nrow(before2017)
+after2017 = subset(cars, Month > 201612)
+nrow(after2017)
+nrow(as.data.frame(grep('*8003', before2017$HSC, value = T)))
+nrow(as.data.frame(grep('*8003', after2017$HSC, value = T)))
+nrow(as.data.frame(grep('*8006', before2017$HSC, value = T)))
+nrow(as.data.frame(grep('*8006', after2017$HSC, value = T)))
+nrow(as.data.frame(grep('*1915', before2017$HSC, value = T)))
+nrow(as.data.frame(grep('*1915', after2017$HSC, value = T)))
+```
+
+We checked the last 4 digits of the HS code and found that before 2017, there were only ```8003``` and ```8006```, but from 2017, these two codes disappeared and were replaced by ```1915```, which never appeared before 2017, so our conjecture is proved. The solution is that we only need to focus on the first 6 digits of the HS code.
+
+### Model
+
+11. We focus on the subset of ```cars``` where the ```Country``` is Germany.
+
+```{r}
+# We want to predict the total monthly new car VFD import value (aggregated over all HS codes) over time.
+germany <- subset(cars, Country=="Germany")
+germany <- germany[order(germany$Date),]
+germany <- aggregate(germany$VFD, list(germany$Date), FUN = sum)
+```
+
+```{r}
+# The training set is 90% of the data and the test set is only 10% of the data.
+ntrain <- nrow(germany) * 0.9
+train <- germany[1:ntrain,]
+test  <- germany[-(1:ntrain),]
+```
+
+```{r}
+# Fit two models to the training data.
+fitMean = mean(train$x)
+fitLM = lm(x ~ Group.1, train)
+predMean = fitMean
+predLM = predict(fitLM, test)
+RMSE = function(obs, pred) sqrt(mean((pred - obs)^2))
+```
+
+```{r}
+# Calculate RMSE for the predictions of the two models on the test set.
+RMSE(test$x, predMean)
+RMSE(test$x, predLM)
+```
+
+The linear model is better. We plot the results to have a better understanding of the models.
+
+```{r}
+plot(germany$Group.1, germany$x, type = "l",
+main="Monthly New Car Import Value from Germany",
+xlab="Year", ylab="Value for Duty (in millions NZD)")
+abline(h=predMean, col=4, lwd=2)
+abline(fitLM, col=2, lwd=2)
+abline(v = test[1,1],lty=2)
+text(test[10,1], 3, "test", col=6)
+text(train[220,1], 3, "training", col=6)
+```
+
+The imports were increasing between 2000 and 2021, where the linear trend is quite sensible. The linear model is able to capture this increase while a constant model cannot.
+
+COVID-19 effect in 2020 has depressed imports which have slightly rebounded in 2021 making up for it. Therefore any model will have trouble accounting for the COVID-19 effect, our model does a reasonable job given that it does not have that information.
+
+## Summary
+
+In this lab, we explored the overseas trade dataset recording imports of a particular class of cars into New Zealand.
+
+We cleaned the dataset, replaced the names of the columns, and modified the representation of numbers and dates. The dataset covers the years 2000-2021.
+
+Imports tend to grow over time, with Japan being the biggest supplier and sporadic supply in other countries. The total import values by country are highly skewed, so we log-transformed the data.
+
+We also found that from 2017, the system has modified the rules of the HS code, so we recommend only focusing on the first 6 digits of the HS code.
+
+Then, we focus on imports from one country: Germany. The overall volume has been slowly increasing, and the simple linear model captures this well, outperforming a simple constant mean. But there are still some unexplained changes in the linear model due to the COVID-19 effect in 2020/2021.
