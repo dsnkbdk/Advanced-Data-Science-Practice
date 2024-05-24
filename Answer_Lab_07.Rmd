@@ -1,0 +1,228 @@
+---
+title: "STATS 769 Lab 07"
+author: "Wennan Shi"
+date: "30/09/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## Data
+
+For regression trees, the ```Boston``` dataset in the ```MASS``` library is to be used. The response variable is ```medv```, the median value of owner-occupied homes in $1000s.
+
+For classification trees, the Zip code dataset is to be used, being ```ziptrain.csv``` and ```ziptest.csv```, respectively. The response variable is ```digit```, a single-digit numeral from 0 to 9, for 10 class labels.
+
+```{r}
+# Load the libraries
+library(MASS)
+library(tree)
+library(parallel)
+```
+
+## Introduction
+
+1. In your own words, describe briefly the data sets and the practical problems that are associated with them.
+
+The dataset ```Boston``` has 506 observations and 14 variables. Variables cover factors such as geography, economy, environment, population, etc. ```medv``` is the response variable and represents the median house price in each region. This dataset is used for regression trees in this Lab.
+
+The dataset ```ziptrain``` has 7291 observations and ```ziptest``` has 2007 observations. They both have 257 numerical variables. ```digit``` is a response variable in the range 0-9, representing 10 class labels, originally it is ```int``` type, we need to convert it to ```factor``` type. This dataset is used for classification trees in this Lab.
+
+## Regression Trees
+
+2. Fit an unpruned regression tree (using mindev=0.005) to the Boston data and plot it (as clearly as you can, by adjusting the dimension of the diagram in your R Markdown file).
+
+```{r}
+str(Boston)
+(r = tree(medv ~ ., data=Boston, mindev=0.005))
+```
+
+```{r, fig.width=10, fig.height=8, fig.align='center'}
+plot(r)
+text(r, pretty=0)
+```
+
+Identify the four most important splits in the unpruned tree, and explain why they are.
+
+The four most important splits are: ```rm < 6.941```, ```Istat < 14.4```, ```rm < 7.437```, ```dis < 1.38485```.
+
+According to the dendrogram, the height of lines is proportional to the variance reduction given by the split. A large jump of lines indicates that the variance reduction is also large. Therefore, it can be used as an important basis for splitting.
+
+3. Find the solutions to the following questions from the unpruned tree (without using code).
+
+i. What is the variation (TSS) reduction by the split at the root node?
+
+42720.0 - 17320.0 - 6059.0 = 19341
+
+ii. What is the predicted response value by the tree for the following observation?
+
+| crim | zn | indus | chas | nox | rm | age | dis | rad | tax | ptratio | black | lstat |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| 4.3 | 23 | 18 | 0.3 | 0.8 | 4 | 40 | 8 | 12 | 420 | 15 | 120 | 18 |
+
+rm (4) < 6.941 ➝ lstat (18) > 14.4 ➝ crim (4.3) < 6.99237 ➝ nox (0.8) > 0.531. The predicted response value is: 16.24.
+
+iii. In which hyper-rectangular "region", the median value of owner-occupied homes is the highest?
+
+The highest ```medv``` is 46.82. The hyper-rectangular "region" is: {rm > 6.941, rm > 7.437, ptratio < 17.9}.
+
+4. Find the best pruned tree of size 5.
+
+```{r}
+(p.r = prune.tree(r))
+(pr5 = prune.tree(r, best=5))
+plot(pr5)
+text(pr5, pretty=0)
+```
+
+Does this tree contain the most important splits you chose earlier? Describe when the best pruned tree of size k must contain the (k-1) most important splits. Provide your reasoning.
+
+Yes, this pruned tree contains the most important splits we choose earlier.
+
+When the tree is growing from the root, the new node looks for the optimal split, the optimality means maximizing the variation reduction. So the larger variation reduction occurs in the upper part of the tree. At this time, the best pruned tree of size k must contain the (k-1) most important splits.
+
+Conversely, if the tree is not growing from the root, a larger variation reduction may occur in the lower part of the tree. Since the pruning is bottom-up, some larger variation reduction may be pruned. At this time, the best pruned tree of size k may not contain the (k-1) most important splits.
+
+5. Find the pruned tree, based on 10-fold cross-validation (just 1 repetition), and plot it (as clearly as you can).
+
+```{r}
+set.seed(666)
+(cv.r = cv.tree(r))
+(j.min = max(which(cv.r$dev == min(cv.r$dev))))
+(size = cv.r$size[j.min])
+(cvpr = prune.tree(r, best=size))
+```
+
+```{r, fig.width=10, fig.height=8, fig.align='center'}
+plot(cvpr)
+text(cvpr, pretty=0)
+```
+
+## Classification trees
+
+6. Grow an unpruned tree that fits the training data perfectly. (No need to plot it, as it may be quite large).
+
+```{r}
+ziptrain = read.csv("ziptrain.csv", strings=TRUE)
+ziptest = read.csv("ziptest.csv", strings=TRUE)
+ziptrain$digit = factor(ziptrain$digit)
+ziptest$digit = factor(ziptest$digit)
+dim(ziptrain)
+dim(ziptest)
+```
+
+```{r}
+r = tree(digit ~ ., data=ziptrain, minsize=2, mindev=0)
+summary(r)
+```
+
+Consider pruning this tree using the cost-complexity criterion in terms of deviance/entropy. Find the (training) deviance values of all the trees in the sequence of nested trees. Must these values be monotone with the size of the tree? Explain why.
+
+```{r}
+p.r = prune.tree(r)
+p.r$dev
+```
+
+The process of the tree growing from the root is the process of variation reduction. The new node looks for the optimal split, the optimality means maximizing the variation reduction. The deviance values decrease as the size of the tree increases, and conversely, they increase as the size of the tree decreases. Therefore, the deviance values are monotone with the size of the tree.
+
+7. Consider pruning the unpruned tree obtained in Question 6, using the cost-complexity criterion in terms of deviance.
+
+```{r}
+(j.min = max(which(p.r$dev == min(p.r$dev))))
+(size = p.r$size[j.min])
+pr = prune.tree(r, best=size)
+summary(pr)
+```
+
+Find both the training and test errors of all the nested trees in the sequence. Show both error curves versus the size of the tree in one graph.
+
+```{r}
+train_error_list = c()
+test_error_list = c()
+for (size in p.r$size) {
+	if (size == 1) {
+		pr = prune.tree(r, best=size)
+		class(pr) <- "tree"
+	} else {
+		pr = prune.tree(r, best=size)
+	}
+	train_error = mean(ziptrain$digit != predict(pr, ziptrain, type="class"))
+	test_error = mean(ziptest$digit != predict(pr, ziptest, type="class"))
+	train_error_list = append(train_error_list, train_error)
+	test_error_list = append(test_error_list, test_error)
+}
+train_error_list
+test_error_list
+```
+
+```{r}
+plot(p.r$size, train_error_list, type='l', col=2, xlab="Tree size", ylab="Misclassifcation Rates")
+lines(p.r$size, test_error_list, col=4)
+legend("topright", c("train","test"), lty=1, col=c(2,4))
+```
+
+From the above results, it can be seen that as the size of the tree increases, the training and test errors decrease accordingly. But overall, the test error will be higher than the training error. This is because the tree model is grown based on the training data. As the size of the tree increases, the model will gradually overfit, and the training error will continue to decrease until 0. The test error tends to be stable after it drops to a certain level.
+
+8. Consider pruning the tree using 10-fold cross-validation with 20 repetitions (in aid of parallel computing using 20 cores) for the purpose of minimising the deviance. What are the training and test errors of the resulting (smallest) pruned tree?
+
+```{r}
+f8 <- function(r, seed) {
+	set.seed(seed)
+	cv.r = cv.tree(r)
+	return(cv.r$dev)
+}
+dev8 = rowMeans(do.call(cbind, mclapply(1:20, function(i) f8(r, i), mc.cores=20)))
+j.min = max(which(dev8 == min(dev8)))
+cv.r = cv.tree(r)
+size = cv.r$size[j.min]
+pr8 = prune.tree(r, best=size)
+size
+```
+
+```{r}
+train_error = mean(ziptrain$digit != predict(pr8, ziptrain, type="class"))
+train_error
+test_error = mean(ziptest$digit != predict(pr8, ziptest, type="class"))
+test_error
+```
+
+From the above results, it can be seen that when the tree size=18, the training and test errors of the resulting (smallest) pruned tree are 0.2134138 and 0.2640757, respectively.
+
+9. Consider pruning the tree using 10-fold cross-validation with 20 repetitions (in aid of parallel computing using 20 cores) for the purpose of minimising the misclassification rate. What are the training and test errors of the resulting (smallest) pruned tree?
+
+```{r}
+f9 <- function(r, seed) {
+	set.seed(seed)
+	cv.r = cv.tree(r, method="misclass")
+	return(cv.r$dev)
+}
+dev9 = rowMeans(do.call(cbind, mclapply(1:20, function(i) f9(r, i), mc.cores=20)))
+j.min = max(which(dev9 == min(dev9)))
+cv.r = cv.tree(r, method="misclass")
+size = cv.r$size[j.min]
+pr9 = prune.tree(r, best=size, method="misclass")
+size
+```
+
+```{r}
+train_error = mean(ziptrain$digit != predict(pr9, ziptrain, type="class"))
+train_error
+test_error = mean(ziptest$digit != predict(pr9, ziptest, type="class"))
+test_error
+```
+
+From the above results, it can be seen that when the tree size=96, the training and test errors of the resulting (smallest) pruned tree are 0.07790427 and 0.1699053, respectively.
+
+## Summary
+
+10. Write a summary of the entire report.
+
+In this Lab, we studied two tree-based models, the regression tree and the classification tree. When the type of the response variable is ```numeric```, it will grow into a regression tree, when the type of the response variable is ```factor```, it will grow into a classification tree.
+
+In a dendrogram, the height of the line is proportional to the variation reduction given by the split, so the importance of the split can be judged based on the length of the line. When the tree is growing from the root, the best pruned tree of size k must contain the (k-1) most important splits.
+
+All the trees in the sequence of nested trees can be checked by the function ```prune.tree()``` or ```cv.tree()```. Usually, we find the smallest ```dev``` first, and then find the corresponding ```size``` or ```k``` to prune the tree. The deviance values are monotone with the size of the tree.
+
+As the size of the tree increases, the training and test errors decrease accordingly. But overall, the test error will be higher than the training error. This is because the tree model is grown based on the training data. As the size of the tree increases, the model will gradually overfit, and the training error will continue to decrease until 0. The test error tends to be stable after it drops to a certain level.

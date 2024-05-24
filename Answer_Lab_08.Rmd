@@ -1,0 +1,312 @@
+---
+title: "STATS 769 Lab 08"
+author: "Wennan Shi"
+date: "08/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## The Data Set
+
+We will continue to use the two Zip code datasets that we have used for Lab 7.
+
+For the tasks below, we will only study two-class problems, for ```digit=2``` or ```3```. Extract the corresponding training and testing subsets from ```ziptrain.csv``` and ```ziptest.csv```, respectively.
+
+```{r, message=FALSE}
+library(gbm)
+library(tree)
+library(mclust)
+library(parallel)
+library(randomForest)
+```
+
+## Introduction
+
+1. In your own words, describe briefly the data and the data mining problems that are studied in this lab.
+
+In order to study two-class problems, this Lab only extracts the subsets of ```digit=2``` or ```3``` from ```ziptrain.csv``` and ```ziptest.csv```, respectively.
+
+The dataset ```train``` has 1389 observations and ```test``` has 364 observations. They both have 257 numerical variables. ```digit``` is a response variable in the range 2 and 3, originally it is int type, we need to convert it to factor type.
+
+## Pruned tree
+
+2. Grow an unpruned tree that fits the training data perfectly.
+
+Prune the tree using 10-fold cross-validation with 20 repetitions (in aid of parallel computing using 20 cores) for the purpose of minimising the misclassification rate. What are the training and test errors of the resulting pruned tree?
+
+```{r}
+train = subset(read.csv("ziptrain.csv"), digit==2 | digit==3)
+test = subset(read.csv("ziptest.csv"), digit==2 | digit==3)
+train$digit = factor(train$digit)
+test$digit = factor(test$digit)
+```
+
+```{r}
+r2 = tree(digit ~ ., data=train, minsize=2, mindev=0)
+pr = prune.tree(r2, method="misclass")
+```
+
+```{r}
+f2 <- function(r, seed) {
+    set.seed(seed)
+    cv.r = cv.tree(r, method="misclass")
+    cv.r$dev
+}
+mcr = rowMeans(simplify2array(mclapply(1:20, function(i) f2(r2, i), mc.cores=20)))
+index = max(which(mcr == min(mcr)))
+(size = pr$size[index])
+pr2 = prune.tree(r2, best=size, method="misclass")
+(train_error = mean(train$digit != predict(pr2, train, type="class")))
+(test_error = mean(test$digit != predict(pr2, test, type="class")))
+```
+
+3. Since we are going to compute the training and test errors frequently below, write a simple R function named ```errors()``` that computes both the training and test errors and can be re-used for any family of classification models, as long as there is a function to supply the predicted class labels.
+
+For example, running the function here for a classification tree may look like:
+
+```{r, eval=FALSE}
+errors(fit, fhat.tree, train, test)
+```
+
+where ```fit``` is an object of class ```tree``` (like the output of ```tree()``` or ```prune.tree()```), and ```fhat.tree``` is a function that uses ```fit``` and returns the predicted class labels for a data set (which is the argument of ```fhat.tree```).
+
+```{r}
+fhat.tree = function(fit, data) {
+	predict(fit, data, type="class")
+}
+
+errors = function(fit, fhat, train, test) {
+	train_error = mean(train$digit != fhat.tree(fit, train))
+	test_error = mean(test$digit != fhat.tree(fit, test))
+	c('training error'=train_error, 'test error'=test_error)
+}
+```
+
+Demonstrate that ```errors()``` and ```fhat.tree()``` works correctly for the pruned tree.
+
+```{r}
+head(fhat.tree(pr2, train))
+head(fhat.tree(pr2, test))
+errors(pr2, fhat.tree, train, test)
+```
+
+The validation results show that the training and testing errors are consistent with the results of Q2, proving that both functions work correctly.
+
+## Bagging
+
+4. Produce a Bagging model for the training data with 500 trees (with ```nodesize=1```) constructed.
+
+```{r}
+set.seed(666)
+(r4 = randomForest(digit ~ ., data=train, mtry=ncol(train)-1, nodesize=1, importance=TRUE))
+plot(r4, main="Bagging Error rates", lty=1, col=2:4)
+legend("topright", leg=colnames(r4$err.rate), lty=1, col=2:4)
+```
+
+What are the three most important variables, in terms of decreasing the Gini index, according to Bagging?
+
+```{r}
+gini_dec = order(importance(r4)[,4], decreasing=TRUE)
+head(importance(r4)[gini_dec,])
+```
+
+The three most important variables are: p167, p184, p168.
+
+Compute both the training and test errors of this Bagging predictor.
+
+Is your test error similar to the OOB estimate? Do you think Bagging helps prediction here when compared with the pruned tree in Task 3?
+
+```{r}
+fhat.bagging = function(fit, data) {
+	predict(fit, data)
+}
+errors(r4, fhat.bagging, train, test)
+```
+
+The test error is 0.04945055, and the OOB estimate is 0.0202, can be considered similar.
+
+Bagging helps prediction here because compared with the pruned tree in Task 3 the test error reduced from 0.06868132 to 0.04945055.
+
+## Random Forests
+
+5. Produce a Random Forest model with 500 trees (with ```nodesize=1```) constructed.
+
+A Random Forest only considers m randomly chosen predictors as candidates for each search for an optimal split. Typically, m≈sqrt(p).
+
+```{r}
+set.seed(666)
+(r5 = randomForest(digit ~ ., data=train, mtry=sqrt(ncol(train)-1), nodesize=1, importance=TRUE))
+plot(r5, main="Random Forests Error rates", lty=1, col=2:4)
+legend("topright", leg=colnames(r5$err.rate), lty=1, col=2:4)
+```
+
+What are the three most important variables, in terms of accuracy, according to Random Forest?
+
+```{r}
+acc_dec = order(importance(r5)[,3], decreasing=TRUE)
+head(importance(r5)[acc_dec,])
+```
+
+The three most important variables are: p166, p167, p184.
+
+Compute both the training and test errors of this Random Forest predictor.
+
+Is your test error similar to the OOB estimate? Do you think the tweak used by Random Forest helps prediction here when compared with the Bagging predictor in Task 4?
+
+```{r}
+fhat.randomForest = function(fit, data) {
+	predict(fit, data)
+}
+errors(r5, fhat.randomForest, train, test)
+```
+
+The test error is 0.04120879, and the OOB estimate is 0.013. The test error seems to be slightly higher than the OOB estimate.
+
+The tweak used by Random Forest helps prediction here but not too much because compared with the Bagging predictor in Task 4 the test error slightly reduced from 0.04945055 to 0.04120879.
+
+6. Further consider using ```nodesize=5,10,20```, respectively, when building a Random Forest model with 500 trees constructed.
+
+Compute both the training and test errors of these Random Forest predictors. Do the training and test errors differ much for a different value of ```nodesize```?
+
+```{r}
+set.seed(666)
+(r65 = randomForest(digit ~ ., data=train, mtry=16, nodesize=5, importance=TRUE))
+errors(r65, fhat.randomForest, train, test)
+set.seed(666)
+(r610 = randomForest(digit ~ ., data=train, mtry=16, nodesize=10, importance=TRUE))
+errors(r610, fhat.randomForest, train, test)
+set.seed(666)
+(r620 = randomForest(digit ~ ., data=train, mtry=16, nodesize=20, importance=TRUE))
+errors(r620, fhat.randomForest, train, test)
+```
+
+It can be seen from the above results, when ```nodesize``` is 5 or 10, the training and test errors do not change, which are 0 and 0.04395604, respectively. When ```nodesize``` is 20, both the training and test errors have increased, but cannot be said differ much, they are 0.003599712 and 0.049450549 respectively.
+
+It can be speculated that as the value of ```nodesize``` increases, the training and test errors will increase.
+
+## Boosting
+
+7. Produce a Boosting model, with 500 trees constructed.
+
+```{r}
+train2 = transform(train, digit2=as.numeric(train$digit)-1)
+test2 = transform(test, digit2=as.numeric(test$digit)-1)
+set.seed(666)
+(r7 = gbm(digit2 ~ . - digit, data=train2, distribution="bernoulli", n.trees=500, interaction.depth=3))
+```
+
+What are the three most important variables, according to Boosting?
+
+```{r, fig.height=15}
+head(summary(r7))
+```
+
+The three most important variables are: p184, p168, p165.
+
+Compute both the training and test errors of this Boosting predictor.
+
+In terms of performance, how does this Boosting predictor compare with the other predictors obtained in Tasks 2, 4, 5 and 6?
+
+```{r}
+fhat.boosting = function(fit, data) {
+	predict(fit, data, type="response")
+}
+
+errors = function(fit, fhat, train, test) {
+	train_error = mean(train$digit2 != as.numeric(fhat.boosting(fit, train) > 0.5))
+	test_error = mean(test$digit2 != as.numeric(fhat.boosting(fit, test) > 0.5))
+	c('training error'=train_error, 'test error'=test_error)
+}
+```
+
+```{r}
+errors(r7, fhat.boosting, train2, test2)
+```
+
+| error | Task 2 | Task 4 | Task 5 | Task 65 | Task 610 | Task 620 | Task 7 |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| train error | 0.02591793 | 0 | 0 | 0 | 0 | 0.003599712 | 0 |
+| test error | 0.06868132 | 0.04945055 | 0.04120879 | 0.04395604 | 0.04395604 | 0.049450549 | 0.03021978 |
+
+From the above table, it can be seen that, compared with the other predictors obtained in Tasks 2, 4, 5 and 6, the Boosting predictor performs the best because it has the smallest test error.
+
+## Clustering
+
+8. Without using the ```digit``` variable, run the K-means algorithm to partition the training data into K = 2,…,5 clusters, respectively.
+
+```{r}
+train3 = train[,-1]
+r82 = kmeans(train3, centers=2)
+r83 = kmeans(train3, centers=3)
+r84 = kmeans(train3, centers=4)
+r85 = kmeans(train3, centers=5)
+```
+
+Compute the adjusted Rand indices for these clustering results, when compared with the levels of the ```digit``` variable. Does this unsupervised learning method do a good job for the supervised data set here, in particular when K = 2?
+
+```{r}
+ari = double(4)
+for(k in 2:5) {
+  r = kmeans(train3, centers=k)
+  ari[k-1] = adjustedRandIndex(train$digit, r$cluster)
+}
+ari
+```
+
+This unsupervised learning method performs best when k = 2, because at this time the Adjusted Rand Index is the highest, which means a high degree (but not perfect) of agreement between the two partitions.
+
+9. Redo Task 8, using instead each of the four linkage methods: "complete", "single", "average" and "centroid".
+
+```{r}
+d = dist(train3)
+r_complete = hclust(d)
+ari = double(4)
+for(k in 2:5) {
+  cluster = cutree(r_complete, k)
+  ari[k-1] = adjustedRandIndex(train$digit, cluster)
+}
+ari
+```
+
+```{r}
+r_single = hclust(d, method="single")
+ari = double(4)
+for(k in 2:5) {
+  cluster = cutree(r_single, k)
+  ari[k-1] = adjustedRandIndex(train$digit, cluster)
+}
+ari
+```
+
+```{r}
+r_average = hclust(d, method="average")
+ari = double(4)
+for(k in 2:5) {
+  cluster = cutree(r_average, k)
+  ari[k-1] = adjustedRandIndex(train$digit, cluster)
+}
+ari
+```
+
+```{r}
+r_centroid = hclust(d, method="centroid")
+ari = double(4)
+for(k in 2:5) {
+  cluster = cutree(r_centroid, k)
+  ari[k-1] = adjustedRandIndex(train$digit, cluster)
+}
+ari
+```
+
+## Summary
+
+10. Write a summary of the entire report.
+
+In this Lab, we studied Ensemble Methods and Clustering. We extract the subsets of ```digit=2``` or ```3``` from ```ziptrain.csv``` and ```ziptest.csv```, respectively.
+
+First we evaluated the training and test errors of the pruned tree. Then we re-evaluated the training and test errors with three Ensemble Methods: Bagging, Random Forests, and Boosting. In practice, Bagging and Random Forests use the same function ```randomForest()```. The main difference is that Bagging considers all predictors, while Random Forests only considers m randomly chosen predictors as candidates for each search for an optimal split. We also studied the change in training and testing errors when ```nodesize=5, 10, 20```. In the Boosting method, we need to convert the response variable into the form of Bernoulli, that is, 0 or 1. Comparing the above methods, we can see that Boosting predictor performs the best because it has the smallest test error.
+
+In addition, we studied the K-means algorithm and four linkage methods. The results show that the K-means algorithm performs best when k = 2, because at this time the Adjusted Rand Index is the highest. Among the four linkage methods, the ```complete``` method has the best clustering results, especially when k = 2, its Adjusted Rand Index is very close to the K-means algorithm.

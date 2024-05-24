@@ -1,0 +1,286 @@
+---
+title: "STATS 769 Lab 06"
+author: "Wennan Shi"
+date: "24/09/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## The Data Set
+
+The data source for this lab is from UCI Machine Learning Repository. We are going to the use a subset of the Bank Marketing data set ```bank-full```.
+
+Read in the data from ```bank-subset.csv```, and split it into two subsets, one for training which contains the first 1000 observations and the other for testing which contains the remaining 4000 observations.
+
+```{r}
+# Load the libraries
+library(MASS)
+library(e1071)
+library(class)
+library(parallel)
+```
+
+```{r}
+bank = read.csv("bank-subset.csv", strings=TRUE)
+X = model.matrix(y ~ ., data=bank)[,-1]
+i = 1:1000
+train = data.frame(X[i,], y=bank$y[i])
+test = data.frame(X[-i,], y=bank$y[-i])
+```
+
+## Introduction
+
+1. In your own words, describe briefly the data and the practical problem that is associated with the data.
+
+Data come from direct phone sales of Portuguese banking institutions. The dataset ```bank-subset.csv``` we used in this Lab is a subset of ```bank-full.csv```.
+
+According to the observation, the dataset has a total of 16 input variables and 1 output variable (classification) ```y```. The input variables include client data (such as age, job, marital status, etc) and other attributes (such as the number of contacts, previous marketing outcome, etc). Output variable ```y``` indicates if the client will subscribe a term deposit.
+
+The variable named ```duration``` refers to the last contact duration. It highly effects on the output target, but we keep it in this Lab.
+
+The variable named ```balance``` is not mentioned in the description of the original dataset, and its range is (-2827 ~ 52587).
+
+Since there are many categorical variables in the dataset, in order to use the basic classification methods, we convert them into dummy binary variables, so the input variables are split into 42 numerical variables.
+
+## Basic Classification Methods
+
+2. Use the linear discriminant analysis to predict the class labels. Produce the confusion matrix and compute the misclassification rate, for both the training and test sets.
+
+```{r}
+r = lda(y ~ ., data=train)
+yhat_train = predict(r, newdata=train)$class
+yhat_test = predict(r, newdata=test)$class
+table(train$y, yhat_train)
+table(test$y, yhat_test)
+(mis_rate_train = mean(train$y != yhat_train))
+(mis_rate_test = mean(test$y != yhat_test))
+```
+
+3. Use the Naive Bayes method to predict the class labels. Produce the confusion matrix and compute the misclassification rate, for both the training and test sets.
+
+```{r}
+r = naiveBayes(y ~ ., data=train)
+yhat_train = predict(r, newdata=train)
+yhat_test = predict(r, newdata=test)
+table(train$y, yhat_train)
+table(test$y, yhat_test)
+(mis_rate_train = mean(train$y != yhat_train))
+(mis_rate_test = mean(test$y != yhat_test))
+```
+
+4. Use the K-nearest-neighbour (KNN) method to predict the class labels, with K=1,5, respectively. Produce the confusion matrix and compute the misclassification rates, for both the training and test sets.
+
+```{r}
+# k=1
+yhat_train = knn(train=train[,1:42], test=train[,1:42], cl=train[,43], k=1)
+yhat_test = knn(train=train[,1:42], test=test[,1:42], cl=train[,43], k=1)
+table(train[,43], yhat_train)
+table(test[,43], yhat_test)
+(mis_rate_train = mean(train$y != yhat_train))
+(mis_rate_test = mean(test$y != yhat_test))
+```
+
+```{r}
+# k=5
+yhat_train = knn(train=train[,1:42], test=train[,1:42], cl=train[,43], k=5)
+yhat_test = knn(train=train[,1:42], test=test[,1:42], cl=train[,43], k=5)
+table(train[,43], yhat_train)
+table(test[,43], yhat_test)
+(mis_rate_train = mean(train$y != yhat_train))
+(mis_rate_test = mean(test$y != yhat_test))
+```
+
+5. Use the K-nearest-neighbour (KNN) method to predict the class labels, with K=1,2,...,30, respectively. Compute the misclassification rates, for both the training and test sets. Show the two curves for the misclassification rate versus K in one graph.
+
+```{r}
+L_train = c()
+L_test = c()
+for (i in 1:30) {
+	yhat_train = knn(train=train[,1:42], test=train[,1:42], cl=train[,43], k=i)
+	yhat_test = knn(train=train[,1:42], test=test[,1:42], cl=train[,43], k=i)
+	mis_rate_train = mean(train$y != yhat_train)
+	mis_rate_test = mean(test$y != yhat_test)
+	L_train = append(L_train, mis_rate_train)
+	L_test = append(L_test, mis_rate_test)
+}
+L_train
+L_test
+matplot(cbind(L_train,L_test), type='l', lty=1, col=c(2,4), xlab="Value of K", ylab="Misclassifcation Rate")
+legend("topright", c("train","test"), lty=1, col=c(2,4))
+```
+
+It can be observed from the above plot that as the value of K increases, the misclassification rate based on the training set gradually increases, while the misclassification rate based on the test set gradually decreases. After about K=7, the changes in the misclassification rates of the two tend to be stable, basically between 0.10 and 0.11.
+
+## Data resampling
+
+### Cross-validation
+
+6. Use 10-fold cross-validation, with 20 repetitions, to find an appropriate value for K in KNN from the training data only. Explain why you have used the technique of the same subsamples.
+
+```{r}
+n = 1000	# number of observations
+R = 20		# 20 repetitions
+M = 10		# 10-fold CV
+K = 30		# largest value for K in KNN
+pe6 = matrix(nrow=R*M, ncol=K)
+test.set = function(i, n, K=10) {
+	index = c(0, round(1:(K-1)*n/K), n)
+	(index[i]+1):index[i+1]
+}
+```
+
+```{r}
+set.seed(666)
+for(i in 1:R) {				# for each repetition
+	ind = sample(n)
+	for(j in 1:M) {			# for each fold
+		index = ind[test.set(j, n, M)]
+		test_data = train[index,]
+		train_data = train[-index,]
+		for(k in 1:K) {		# for each k nearest neighbours
+			yhat = knn(train=train_data[,1:42], test=test_data[,1:42], cl=train_data[,43], k=k)
+			pe6[M*(i-1)+j,k] = mean(yhat != test_data[,43])
+		}
+	}
+}
+head(pe6)
+(pe6_col = colMeans(pe6))
+plot(1:K, pe6_col, type="o", xlab="Value of K", ylab="Prediction error rate")
+(k.optimal = which.min(pe6_col))
+```
+
+For different methods included in the comparison, using the same subsamples technique (i.e. the same training and test sets)  is more efficient and does not change the variation of the estimated PE of any method, and it helps when comparing relative performance.
+
+### Jackknifing and Parallel Computing
+
+7. Use the Jackknifing technique (with a 90% for training and 10% for testing) to find an appropriate value for K in KNN from the training data only. Use ```R = 200``` as the number of repetitions.
+
+```{r}
+n = 1000	# number of observations
+R = 200		# 200 repetitions
+K = 30		# largest value for K in KNN
+pe7 = matrix(nrow=R, ncol=K)
+# Use the technique of same subsamples, because it is more efficient.
+set.seed(666)
+for(i in 1:R) {
+	index = sample(n, round(n*0.1))
+	test_data = train[index,]
+	train_data = train[-index,]
+	for(j in 1:K) {
+		yhat = knn(train=train_data[,1:42], test=test_data[,1:42], cl=train_data[,43], k=j)
+		pe7[i,j] = mean(yhat != test_data[,43])
+	}
+}
+head(pe7)
+(pe7_col = colMeans(pe7))
+plot(1:K, pe7_col, type="o", xlab="Value of K", ylab="Prediction error rate")
+(k.optimal = which.min(pe7_col))
+```
+
+8. Rewrite/reorganise the code so that each repetition can be carried out independently. Perform the Jackknifing selection of the K-value from the training set using parallel computing, with function ```mclapply()```.
+
+Compare the timings, when 1, 5, 10 or 20 cores are used.
+
+```{r}
+n = 1000	# number of observations
+R = 200		# 200 repetitions
+K = 30		# largest value for K in KNN
+pe_fun <- function(n, K) {
+	pe = matrix(nrow=1, ncol=K)
+	index = sample(n, round(n*0.1))
+	test_data = train[index,]
+	train_data = train[-index,]
+	for(j in 1:K) {
+		yhat = knn(train=train_data[,1:42], test=test_data[,1:42], cl=train_data[,43], k=j)
+		pe[1,j] = mean(yhat != test_data[,43])
+	}
+	pe
+}
+```
+
+```{r}
+set.seed(666)
+pe81 = do.call(rbind, mclapply(1:R, function(i) pe_fun(n, K), mc.cores=1))
+head(pe81)
+identical(pe7, pe81)
+set.seed(666)
+pe851 = do.call(rbind, mclapply(1:R, function(i) pe_fun(n, K), mc.cores=5))
+head(pe851)
+identical(pe7, pe851)
+set.seed(666)
+pe852 = do.call(rbind, mclapply(1:R, function(i) pe_fun(n, K), mc.cores=5))
+head(pe852)
+identical(pe851, pe852)
+```
+
+From the above results, it can be seen that in the case of the same random seed, when core=1, can reproduce the same result as Q7. But when cores>1, the random seed does not work, so when we run the same algorithm (for example core=5) again, the results are not reproducible. We will discuss solutions to reproduce the same results in the parallel computing environment in Q9.
+
+```{r}
+system.time(mclapply(1:R, function(i) pe_fun(n, K), mc.cores=1))
+system.time(mclapply(1:R, function(i) pe_fun(n, K), mc.cores=5))
+system.time(mclapply(1:R, function(i) pe_fun(n, K), mc.cores=10))
+system.time(mclapply(1:R, function(i) pe_fun(n, K), mc.cores=20))
+```
+
+From the above results, it can be seen that as the number of cores used increases, the running time (elapsed time) decreases, proving that the parallel algorithm improves the running efficiency.
+
+9. For results to be reproducible, it is better to use random seeds. Investigate and demonstrate how this can be achieved when ```mclapply()``` is used.
+
+```{r}
+pe_fun2 <- function(n, K, seed) {
+	set.seed(seed)	# put set.seed() into the function
+	pe = matrix(nrow=1, ncol=K)
+	index = sample(n, round(n*0.1))
+	test_data = train[index,]
+	train_data = train[-index,]
+	for(j in 1:K) {
+		yhat = knn(train=train_data[,1:42], test=test_data[,1:42], cl=train_data[,43], k=j)
+		pe[1,j] = mean(yhat != test_data[,43])
+	}
+	pe
+}
+```
+
+```{r}
+# The random seeds vary with R to ensure they are not identical at each iteration.
+pe911 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=1))
+pe951 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=5))
+pe9101 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=10))
+pe9201 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=20))
+```
+
+```{r}
+# Repeat the same algorithms again
+pe912 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=1))
+pe952 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=5))
+pe9102 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=10))
+pe9202 = do.call(rbind, mclapply(1:R, function(i) pe_fun2(n, K, i), mc.cores=20))
+```
+
+```{r}
+identical(pe911, pe912)
+identical(pe951, pe952)
+identical(pe9101, pe9102)
+identical(pe9201, pe9202)
+```
+
+From the above results, it can be seen that when we put ```set.seed()``` into the function and let it change regularly with R, it can make the result of ```mclapply()``` reproduce.
+
+## Summary
+
+10. Write a summary of the entire report.
+
+In this Lab, we conduct related studies on classification methods and data resampling techniques.
+
+Data come from direct phone sales of Portuguese banking institutions. The dataset ```bank-subset.csv``` we used in this Lab is a subset of ```bank-full.csv```.
+
+In basic classification methods, we use 3 methods to predict the class labels (linear discriminant analysis, Naive Bayes method, and K-nearest-neighbour (KNN) method). From the experimental results, the linear discriminant analysis has a lower misclassification rate, while the Naive Bayes method has a higher misclassification rate. The results of the K-nearest-neighbour (KNN) method are special, as K increases, the misclassification rate on the training set increases, while the misclassification rate on the test set decreases. In this experiment, after about K=7, the changes in the misclassification rates of the two tend to be stable, basically between 0.10 and 0.11.
+
+In data resampling, we use 2 methods to find an appropriate value of K (Cross-validation, Jackknifing). This involves the same subsamples technique, for different methods included in the comparison, using this technique is more efficient and does not change the variation of the estimated PE of any method. Theoretically, at the same computational cost, CV gives a more accurate PE estimation than jackknifing.
+
+In addition, we also use parallel computing to improve running efficiency. From the experimental results, as the number of cores used increases, the running time decreases.
+
+Finally, we also verify the effect of random seeds on the results when ```mclapply()``` is used. When we put ```set.seed()``` into the function and let it change regularly with R, it can make the result of ```mclapply()``` reproduce.

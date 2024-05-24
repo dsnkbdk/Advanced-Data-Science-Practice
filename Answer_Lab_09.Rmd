@@ -1,0 +1,224 @@
+---
+title: "STATS 769 Lab 09"
+author: "Wennan Shi"
+date: "16/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## Data
+
+For classification tasks below (Tasks 2-6), we will continue to use the two Zip code datasets that we have used for Labs 7 and 8. In particular, we will only study two-class problems, for ```digit=2``` or ```3```. Extract the corresponding training and test subsets from ```ziptrain.csv``` and ```ziptest.csv```, respectively.
+
+For regression tasks below (Tasks 7-9), we will re-use the ```Boston``` data set that has been studied in Lab 7.
+
+```{r, message=FALSE}
+library(e1071)
+library(MASS)
+```
+
+## Introduction
+
+1. In your own words, describe briefly the data and the data mining problems that are studied in this lab.
+
+The dataset ```ziptrain.csv``` has 7291 observations and ```ziptest.csv``` has 2007 observations. They both have 257 numerical variables. ```digit``` is a response variable in the range 0-9.
+
+After extract the corresponding training and test subsets, the dataset ```train``` has 1389 observations and ```test``` has 364 observations. They both have 257 numerical variables. ```digit``` is a response variable in the range 2 and 3, originally it is int type, we need to convert it to factor type.
+
+The dataset ```Boston``` has 506 observations and 14 variables. Variables cover factors such as geography, economy, environment, population, etc. ```medv``` is the response variable and represents the median house price in each region.
+
+## Using Two Predictors
+
+2. In Tasks 2-4, let us consider only two predictors, ```p167``` and ```p105```.
+
+Consider fitting support vector machines using the linear kernel, for ```cost=0.0001,0.001,0.01,0.1```, respectively.
+
+To show the decision boundary, you can either use the ```plot``` function provided in the ```e1071``` package or write your own code (perhaps similar to mine).
+
+```{r}
+train = subset(read.csv("ziptrain.csv"), digit==2 | digit==3)
+test = subset(read.csv("ziptest.csv"), digit==2 | digit==3)
+train$digit = factor(train$digit)
+test$digit = factor(test$digit)
+```
+
+```{r}
+col = as.numeric(train$digit) + 1
+cost = c(0.0001, 0.001, 0.01, 0.1)
+error = matrix(nrow=4, ncol=3)
+colnames(error) = c('Cost', 'train_error', 'test_error')
+boundary = matrix(nrow=4, ncol=3)
+colnames(boundary) = c('Cost', 'Intercept', 'Slope')
+```
+
+```{r, fig.width=10, fig.height=10, fig.align='center'}
+j = 1
+par(mfrow=c(2,2))
+for(i in cost) {
+	r = svm(digit ~ p167 + p105, data=train, scale=FALSE, kernel="linear", cost=i)
+	train_error = mean(train$digit != predict(r, train))
+	test_error = mean(test$digit != predict(r, test))
+	error[j,] = c(i, train_error, test_error)
+	plot(train$p167, train$p105, col=col, main=substitute(cost == c, list(c=i)))
+	boundary[j,] = c(i, - coef(r)[-2] / coef(r)[2])
+	abline(- coef(r)[-2] / coef(r)[2], lwd=2)
+	j = j + 1
+	points(train$p167[r$index], train$p105[r$index], pch=20, cex=0.8, col=col[r$index])
+}
+boundary
+```
+
+What is the effect of ```cost``` here, in terms of the decision boundary and the number of support vectors?
+
+The ```cost``` here is the penalty. A larger ```cost``` means fewer violations, the number of support vectors will be reduced. Conversely, a smaller ```cost``` allows more observations to violate the margin.
+
+3. Compute the training and test errors (misclassification rates) for each of the support vector machines found in Task 2.
+
+```{r}
+error
+```
+
+Should the training and test errors be similar to each other in these cases? Explain why or why not.
+
+From the above results, it can be seen that the training and test errors are close, which is due to the simplicity of the linear kernel model and the similar distribution of training and test data.
+
+Find the best value for ```cost```, based on the test errors.
+
+The lowest test error is when ```cost=0.1```.
+
+4. Consider using radial kernels for support vector machines, with the ```cost-value``` fixed at the optimal one found in Task 3.
+
+Consider fitting support vector machines, for ```gamma=0.0001,0.1,10,1000```, respectively.
+
+```{r}
+gamma = c(0.0001, 0.1, 10, 1000)
+error2 = matrix(nrow=4, ncol=3)
+colnames(error2) = c('gamma', 'train_error', 'test_error')
+f = function(x, fit=r) {
+  data = data.frame(p167=x[,1], p105=x[,2])
+  attr(predict(fit, data, probability=TRUE), "probabilities")[,1]
+}
+```
+
+```{r, fig.width=10, fig.height=10, fig.align='center'}
+j = 1
+par(mfrow=c(2,2))
+for(i in gamma) {
+	r = svm(digit ~ p167 + p105, data=train, scale=FALSE, kernel="radial", cost=0.1, gamma=i, probability=TRUE)
+	train_error = mean(train$digit != predict(r, train))
+	test_error = mean(test$digit != predict(r, test))
+	error2[j,] = c(i, train_error, test_error)
+	plot(train$p167, train$p105, col=col, main=substitute(gamma == g, list(g=i)))
+	x = seq(min(train$p167), max(train$p167), len=101)
+	y = seq(min(train$p105), max(train$p105), len=101)
+	z = matrix(f(expand.grid(x, y)), nrow=101)
+	contour(x, y, z, levels=c(0.1,0.5,0.9), lwd=c(1,2,1), lty=c(3,1,3), drawlabels=FALSE, add=TRUE)
+	j = j + 1
+	points(train$p167[r$index], train$p105[r$index], pch=20, cex=0.8, col=col[r$index])
+}
+```
+
+What is the effect of ```gamma``` here, in terms of the decision boundary and the number of support vectors?
+
+```gamma``` is used for the non-linear kernel. Its size affects the model fit. The larger ```gamma``` means the larger the number of support vectors and the more tortuous boundary. Conversely, the smaller ```gamma``` means the smaller the number of support vectors and the smoother boundary.
+
+Compute the training and test errors for each of the support vector machines built. What is the optimal value for ```gamma``` here?
+
+```{r}
+error2
+```
+
+The optimal value here is ```gamma=10```.
+
+Do you think using radial kernels helps here, as compared with the linear kernel?
+
+Radial kernels helps here, because the test error decreased from 0.1346154 to 0.1071429.
+
+## Using All Predictors
+
+5. Now consider using all 256 predictors in support vector machines, using radial kernels.
+
+Fit the support vector machine, using the optimal values for ```cost``` and ```gamma``` found in Tasks 3 and 4.
+
+Compute both the training and test errors for this model.
+
+```{r}
+r = svm(digit ~ ., data=train, scale=FALSE, kernel="radial", cost=0.1, gamma=10)
+(train_error = mean(train$digit != predict(r, train)))
+(test_error = mean(test$digit != predict(r, test)))
+```
+
+6. With all 256 predictors used, find the best values for ```cost``` and ```gamma``` based on 10-fold cross-validation (just one run) from the ```train``` set.
+
+Compute both the training and test errors of the best model found.
+
+```{r}
+set.seed(666)
+rt = tune(svm, digit ~ ., data=train, kernel="radial", scale=FALSE, ranges=list(cost=10^(-3:3), gamma=10^(-3:3)))
+rt$best.parameters
+rt$best.model
+(train_error = mean(train$digit != predict(rt$best.model, train)))
+(test_error = mean(test$digit != predict(rt$best.model, test)))
+```
+
+## Support Vector Regression
+
+7. Consider using only one predictor ```lstat``` (without scaling) for the response ```medv```, in the ```Boston``` data set.
+
+Choose manually a set of values for ```eps```, ```cost``` and ```gamma``` so that the support vector regression fit (with radial kernels) visually looks okay.
+
+```{r}
+eps = 5
+r = svm(medv ~ lstat, data=Boston, scale=FALSE, kernel="radial", cost=100, eps=eps, gamma=0.001)
+plot(medv ~ lstat, data = Boston, col=4)
+xn = data.frame(lstat=seq(min(Boston$lstat), max(Boston$lstat), len=500))
+yn = predict(r, xn)
+(s = r$index)
+points(Boston[s,13], Boston[s,14], pch=20, cex=0.8, col=3)
+lines(xn$lstat, yn, type="l", col=2, lwd=3)
+lines(xn$lstat, yn + eps, type="l", col=2, lwd=3, lty=2)
+lines(xn$lstat, yn - eps, type="l", col=2, lwd=3, lty=2)
+```
+
+8. Consider using all predictors (without scaling) for the response ```medv```.
+
+Fix a reasonably good value for ```eps``` (or you may also include it in the following cross-validation search for best values).
+
+Find the best values for ```cost``` and ```gamma```, using 10-fold cross-validation (just one run).
+
+Provide a rough estimate of the proportion of variation reduction by the best model found.
+
+```{r}
+set.seed(666)
+rt = tune(svm, medv ~ ., data=Boston, scale=FALSE, kernel="radial", ranges=list(cost=10^(-3:3), gamma=10^(-3:3), eps=c(0.01,0.05,0.1,0.5,1,2)))
+rt$best.parameters
+rt$best.model
+1 - min(rt$performance[,"error"]) / mean((Boston$medv-mean(Boston$medv))^2)
+```
+
+9. Re-do Task 8, with all predictors standardised.
+
+```{r}
+set.seed(666)
+rt = tune(svm, medv ~ ., data=Boston, scale=TRUE, kernel="radial", ranges=list(cost=10^(-3:3), gamma=10^(-3:3), eps=c(0.01,0.05,0.1,0.5,1,2)))
+rt$best.parameters
+rt$best.model
+1 - min(rt$performance[,"error"]) / mean((Boston$medv-mean(Boston$medv))^2)
+```
+
+Does the scaling help here?
+
+The scaling help here, because the proportion of variation reduction increase from 0.7240397 to 0.87.
+
+## Summary
+
+10. Write a summary of the entire report.
+
+In this Lab, we study the performance of support vector machines for classification and regression.
+
+First, we only consider 2 predictors and discuss the effect of hyperparameters ```cost``` and ```gamma``` on the decision boundary. And we also study the different classification results for ```linear``` and ```radial``` kernels. Then repeat the experiment with all the predictors using the best ```cost``` and ```gamma``` parameters from the experiment before and used cross-validation to get the best model.
+
+For the support vector regression model, we manually chose the value of ```eps``` to give the model a visually good fit. In addition, we study the effect on model performance with and without scaling, respectively.
